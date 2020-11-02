@@ -175,7 +175,7 @@ impl Client {
             QueryTypes::Read(_) => {
                 let read_query = query.get();
                 let url = &format!("{}/query", self.url);
-                let query = [("q", read_query.clone())];
+                let query = [("q", &read_query)];
 
                 if read_query.contains("SELECT") || read_query.contains("SHOW") {
                     self.client
