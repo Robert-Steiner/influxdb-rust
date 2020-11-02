@@ -213,8 +213,10 @@ impl Client {
             .map_err(|err| Error::ConnectionError { error: err })
             .await?;
 
-        if let StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN = res.status() {
-            return Err(Error::AuthorizationError);
+        match res.status() {
+            StatusCode::UNAUTHORIZED => return Err(Error::AuthorizationError),
+            StatusCode::FORBIDDEN => return Err(Error::AuthenticationError),
+            _ => {}
         }
 
         let s = res.text().await.map_err(|_| Error::DeserializationError {
