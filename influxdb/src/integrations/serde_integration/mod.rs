@@ -124,11 +124,11 @@ pub struct TaggedSeries<TAG, T> {
 
 impl Client {
     pub async fn json_query(&self, q: ReadQuery) -> Result<DatabaseQueryResult, Error> {
-        let query = q.build().unwrap();
+        let query = q.build().map_err(|err| Error::InvalidQueryError {
+            error: format!("{}", err),
+        })?;
 
         let read_query = query.get();
-        let url = &format!("{}/query", self.url);
-        let query = [("q", &read_query.clone())];
 
         if !read_query.contains("SELECT") && !read_query.contains("SHOW") {
             let error = Error::InvalidQueryError {
@@ -139,12 +139,21 @@ impl Client {
             return Err(error);
         }
 
-        let res = self
+        let url = &format!("{}/query", self.url);
+        let query = [("q", &read_query.clone())];
+        let request = self
             .client
             .get(url)
             .query(&self.parameters)
             .query(&query)
-            .send()
+            .build()
+            .map_err(|err| Error::UrlConstructionError {
+                error: format!("{}", err),
+            })?;
+
+        let res = self
+            .client
+            .execute(request)
             .await
             .map_err(|err| Error::ConnectionError { error: err })?;
 

@@ -171,24 +171,16 @@ impl Client {
             error: format!("{}", err),
         })?;
 
-        let request = match q.into() {
+        let request_builder = match q.into() {
             QueryTypes::Read(_) => {
                 let read_query = query.get();
                 let url = &format!("{}/query", self.url);
                 let query = [("q", &read_query)];
 
                 if read_query.contains("SELECT") || read_query.contains("SHOW") {
-                    self.client
-                        .get(url)
-                        .query(&self.parameters)
-                        .query(&query)
-                        .build()
+                    self.client.get(url).query(&self.parameters).query(&query)
                 } else {
-                    self.client
-                        .post(url)
-                        .query(&self.parameters)
-                        .query(&query)
-                        .build()
+                    self.client.post(url).query(&self.parameters).query(&query)
                 }
             }
             QueryTypes::Write(write_query) => {
@@ -200,12 +192,14 @@ impl Client {
                     .query(&self.parameters)
                     .query(&precision)
                     .body(query.get())
-                    .build()
             }
-        }
-        .map_err(|err| Error::InvalidQueryError {
-            error: format!("{}", err),
-        })?;
+        };
+
+        let request = request_builder
+            .build()
+            .map_err(|err| Error::UrlConstructionError {
+                error: format!("{}", err),
+            })?;
 
         let res = self
             .client
