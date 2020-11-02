@@ -48,7 +48,7 @@
 
 mod de;
 
-use reqwest::{Client as ReqwestClient, StatusCode, Url};
+use reqwest::StatusCode;
 
 use serde::{de::DeserializeOwned, Deserialize};
 
@@ -125,45 +125,31 @@ pub struct TaggedSeries<TAG, T> {
 impl Client {
     pub async fn json_query(&self, q: ReadQuery) -> Result<DatabaseQueryResult, Error> {
         let query = q.build().unwrap();
-        let basic_parameters: Vec<(String, String)> = self.into();
-        let client = {
-            let read_query = query.get();
 
-            let mut url = match Url::parse_with_params(
-                format!("{url}/query", url = self.database_url()).as_str(),
-                basic_parameters,
-            ) {
-                Ok(url) => url,
-                Err(err) => {
-                    let error = Error::UrlConstructionError {
-                        error: format!("{}", err),
-                    };
-                    return Err(error);
-                }
+        let read_query = query.get();
+        let url = &format!("{}/query", self.url);
+        let query = [("q", &read_query.clone())];
+
+        if !read_query.contains("SELECT") && !read_query.contains("SHOW") {
+            let error = Error::InvalidQueryError {
+                error: String::from(
+                    "Only SELECT and SHOW queries supported with JSON deserialization",
+                ),
             };
-            url.query_pairs_mut().append_pair("q", &read_query);
+            return Err(error);
+        }
 
-            if !read_query.contains("SELECT") && !read_query.contains("SHOW") {
-                let error = Error::InvalidQueryError {
-                    error: String::from(
-                        "Only SELECT and SHOW queries supported with JSON deserialization",
-                    ),
-                };
-                return Err(error);
-            }
-
-            ReqwestClient::new().get(url.as_str())
-        };
-
-        let res = client
+        let res = self
+            .client
+            .get(url)
+            .query(&self.parameters)
+            .query(&query)
             .send()
             .await
             .map_err(|err| Error::ConnectionError { error: err })?;
 
-        match res.status() {
-            StatusCode::UNAUTHORIZED => return Err(Error::AuthorizationError),
-            StatusCode::FORBIDDEN => return Err(Error::AuthenticationError),
-            _ => {}
+        if let StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN = res.status() {
+            return Err(Error::AuthorizationError);
         }
 
         let body = res.bytes().await.map_err(|err| Error::ProtocolError {
